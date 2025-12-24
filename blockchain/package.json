@@ -1,0 +1,30 @@
+{
+  "name": "certificate-validation-blockchain",
+  "version": "1.0.0",
+  "description": "Blockchain backend for certificate validation system",
+  "main": "index.js",
+  "scripts": {
+    "test": "npx hardhat test",
+    "compile": "npx hardhat compile",
+    "deploy": "npx hardhat run scripts/deploy.js",
+    "ganache": "node ganache-start.js",
+    "deploy:ganache": "npx hardhat run scripts/deploy.js --network ganache"
+  },
+  "keywords": [
+    "blockchain",
+    "certificate",
+    "validation",
+    "hardhat",
+    "ethereum"
+  ],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^4.0.0",
+    "ganache": "^7.9.2",
+    "hardhat": "^2.19.0"
+  },
+  "dependencies": {
+    "@openzeppelin/contracts": "^5.0.0"
+  }
+}
