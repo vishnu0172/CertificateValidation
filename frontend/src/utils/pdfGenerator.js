@@ -1,5 +1,31 @@
 import jsPDF from 'jspdf';
 import QRCode from 'qrcode';
+import { ethers } from 'ethers';
+
+// Get contract address from environment or use default
+const CONTRACT_ADDRESS = process.env.REACT_APP_CONTRACT_ADDRESS || '0x5FbDB2315678afecb367f032d93F642f64180aa3';
+
+// Contract ABI - only the functions we need
+const CONTRACT_ABI = [
+    {
+        "inputs": [
+            {
+                "internalType": "string",
+                "name": "_certId",
+                "type": "string"
+            },
+            {
+                "internalType": "bytes32",
+                "name": "_hash",
+                "type": "bytes32"
+            }
+        ],
+        "name": "storeCertificate",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    }
+];
 
 // Company configurations
 const COMPANIES = {
@@ -205,13 +231,90 @@ export async function generatePDF(data) {
     doc.setFontSize(7);
     doc.text(`Issued on: ${new Date().toLocaleDateString()} | Scan QR code to verify authenticity`, 105, 275, { align: 'center' });
     
+    // Get PDF as blob to calculate hash
+    const pdfBlob = doc.output('blob');
+    
+    // Calculate hash of the actual PDF file
+    const pdfHash = await hashPDFBlob(pdfBlob);
+    console.log('📄 Generated PDF Hash:', pdfHash);
+    
     // Save the PDF
     doc.save(`${certId}.pdf`);
+    
+    // Store certificate on blockchain
+    try {
+        console.log('📝 Attempting to store certificate on blockchain...');
+        console.log('📋 Certificate ID:', certId);
+        console.log('🔐 PDF Hash (first 20 chars):', pdfHash.substring(0, 20));
+        
+        await storeOnBlockchain(certId, pdfHash);
+        console.log('✅ Certificate stored on blockchain successfully!');
+        alert(`✅ Certificate generated and stored on blockchain!\n\nCertificate ID: ${certId}`);
+    } catch (error) {
+        console.error('❌ Failed to store on blockchain:', error);
+        alert(`⚠️ PDF generated but blockchain storage failed!\n\nError: ${error.message}\n\nCertificate ID: ${certId}\n\nPlease check:\n1. Ganache is running\n2. Contract address is correct\n3. Check browser console for details`);
+        throw error; // Throw error so user knows something went wrong
+    }
     
     return certId;
 }
 
-// Generate a simple digital signature using Web Crypto API
+// Store certificate on blockchain
+async function storeOnBlockchain(certId, hashSignature) {
+    try {
+        // Connect to blockchain
+        const rpcUrl = process.env.REACT_APP_RPC_URL || 'http://127.0.0.1:8545';
+        console.log('🔗 Connecting to RPC:', rpcUrl);
+        const provider = new ethers.JsonRpcProvider(rpcUrl);
+        
+        // Check connection
+        const network = await provider.getNetwork();
+        console.log('🌐 Connected to network, Chain ID:', network.chainId.toString());
+        
+        // Use the first Ganache/Hardhat account's private key
+        const privateKey = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
+        const wallet = new ethers.Wallet(privateKey, provider);
+        console.log('👤 Using wallet address:', wallet.address);
+        
+        // Create contract instance
+        console.log('📜 Contract address:', CONTRACT_ADDRESS);
+        const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, wallet);
+        
+        // Convert hash to bytes32 format
+        const hashBytes32 = '0x' + hashSignature.substring(0, 64).padEnd(64, '0');
+        
+        console.log('📝 Storing certificate on blockchain...');
+        console.log('   Certificate ID:', certId);
+        console.log('   Hash (bytes32):', hashBytes32);
+        
+        // Store certificate on blockchain
+        const tx = await contract.storeCertificate(certId, hashBytes32);
+        console.log('📤 Transaction sent! Hash:', tx.hash);
+        
+        // Wait for confirmation
+        const receipt = await tx.wait();
+        console.log('✅ Transaction confirmed! Block:', receipt.blockNumber);
+        
+        return true;
+    } catch (error) {
+        console.error('❌ Blockchain storage error:', error);
+        console.error('   Error name:', error.name);
+        console.error('   Error message:', error.message);
+        if (error.code) console.error('   Error code:', error.code);
+        throw error;
+    }
+}
+
+// Hash PDF blob using SHA-256
+async function hashPDFBlob(blob) {
+    const buffer = await blob.arrayBuffer();
+    const hashBuffer = await crypto.subtle.digest('SHA-256', buffer);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    return hashHex;
+}
+
+// Generate a simple digital signature using Web Crypto API (DEPRECATED - now using PDF hash)
 async function generateDigitalSignature(data) {
     const encoder = new TextEncoder();
     const dataBuffer = encoder.encode(data);

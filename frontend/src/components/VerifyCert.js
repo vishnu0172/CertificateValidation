@@ -2,7 +2,11 @@ import React, { useState } from 'react';
 import { ethers } from "ethers";
 import { sha256 } from "../utils/hash";
 
-const contractAddress = "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512";
+// Get contract address from environment or use default
+const contractAddress = process.env.REACT_APP_CONTRACT_ADDRESS || '0x5FbDB2315678afecb367f032d93F642f64180aa3';
+
+// Get RPC URL from environment
+const rpcUrl = process.env.REACT_APP_RPC_URL || 'http://127.0.0.1:8545';
 
 // Full ABI from compiled contract
 const abi = [
@@ -64,24 +68,36 @@ export default function VerifyCert() {
         }
 
         try {
+            console.log('🔍 Starting verification...');
+            console.log('📋 Certificate ID:', certId);
+            
             const hash = await sha256(file);
+            console.log('📄 PDF File Hash:', '0x' + hash);
             
             // Connect directly to local Hardhat node (no MetaMask)
-            const provider = new ethers.JsonRpcProvider("http://127.0.0.1:8545");
+            const provider = new ethers.JsonRpcProvider(rpcUrl);
             const contract = new ethers.Contract(contractAddress, abi, provider);
 
-            const isValid = await contract.verifyCertificate(certId, "0x" + hash);
             const stored = await contract.getCertificateHash(certId);
+            console.log('⛓️  Stored Hash from Blockchain:', stored);
+            
+            const isValid = await contract.verifyCertificate(certId, "0x" + hash);
+            console.log('✔️  Verification Result:', isValid);
             
             setStoredHash(stored);
             
             if (isValid) {
                 setResult('✅ Certificate is VALID and matches blockchain record!');
+                console.log('✅ VERIFICATION SUCCESSFUL!');
             } else {
                 setResult('❌ Certificate is INVALID or does not match blockchain record!');
+                console.log('❌ VERIFICATION FAILED!');
+                console.log('   PDF Hash:    0x' + hash);
+                console.log('   Stored Hash: ' + stored);
+                console.log('   ⚠️  Hashes do not match!');
             }
         } catch (error) {
-            console.error('Verification error:', error);
+            console.error('❌ Verification error:', error);
             setResult('Error verifying certificate: ' + error.message);
         }
     };
@@ -94,7 +110,7 @@ export default function VerifyCert() {
 
         try {
             // Connect directly to local Hardhat node (no MetaMask)
-            const provider = new ethers.JsonRpcProvider("http://127.0.0.1:8545");
+            const provider = new ethers.JsonRpcProvider(rpcUrl);
             const contract = new ethers.Contract(contractAddress, abi, provider);
 
             const hash = await contract.getCertificateHash(certId);
